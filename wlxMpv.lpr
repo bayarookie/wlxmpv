@@ -47,8 +47,13 @@ uses
   {$IFDEF LCLQT5} qt5, {$ENDIF}
   process,
   math,
-  WLXPlugin;
+  WLXPlugin, IniFiles;
   
+
+var
+  wlxmpvIni: string;
+  wlxmpvAudio: string = '.mp3;.flac;.ape;.wav;.wv;.wma;.m4a;.aac;.ac3;.ogg;.aiff;.alac;.amr;.opus';
+  wlxmpvOSD: string = '${media-title}\n${time-pos} / ${duration} (${percent-pos}%)\n${audio-bitrate}\n${audio-codec}\nsamplerate=${audio-params/samplerate}\nchannels=${audio-params/channel-count}\nformat=${audio-params/format}';
 
 type
 
@@ -83,7 +88,7 @@ end;
 
 destructor TMPVthread.Destroy;
 begin
-  if p.Running then
+  while p.Running do
     p.Terminate(0);
   p.Free;
 {$IF DEFINED(LCLQT) or DEFINED(LCLQT5)}
@@ -133,13 +138,13 @@ begin
   p.Parameters.Add(fileName);
   p.Parameters.Add('--wid=' + IntToStr(xid));
   p.Parameters.Add('--force-window=yes');
-  p.Parameters.Add('--keep-open=yes');
+  p.Parameters.Add('--keep-open=always');
   p.Parameters.Add('--cursor-autohide-fs-only');
   p.Parameters.Add('--script-opts=osc-visibility=always');
-  if Pos(LowerCase(ExtractFileExt(fileName)), '.mp3;.flac;.ape;.wav;.wv;.wma;.m4a;.aac;.ac3;.ogg;.aiff;.alac;.amr;.opus')>0 then
+  if Pos(LowerCase(ExtractFileExt(fileName)), wlxmpvAudio)>0 then
   begin
     p.Parameters.Add('--osd-level=3');
-    p.Parameters.Add('--osd-status-msg=${media-title}\n${time-pos} / ${duration} (${percent-pos}%)\n${audio-bitrate}\n${audio-codec}\n${audio-params}');
+    p.Parameters.Add('--osd-status-msg=' + wlxmpvOSD);
   end;
   WriteLn(p.Executable + ' ' + ReplaceText(p.Parameters.CommaText,',',' '));
   p.Execute;
@@ -167,7 +172,7 @@ TPlugInfo = class
 
 constructor TPlugInfo.Create;
 begin
- fControls:=TStringlist.Create;
+  fControls:=TStringlist.Create;
 end;
 
 destructor TPlugInfo.Destroy;
@@ -184,7 +189,6 @@ function TPlugInfo.AddControl(AItem: TMPVthread): integer;
 begin
   Result := fControls.AddObject(inttostr(PtrUInt(AItem)),TObject(AItem));
 end;
-
 
 {Plugin main part}
 var List:TStringList;
@@ -252,10 +256,26 @@ begin
   StrLCopy(DetectString, '(EXT="AVI")|(EXT="MKV")|(EXT="FLV")|(EXT="MPG")|(EXT="MPEG")|(EXT="MP4")|(EXT="VOB")|(EXT="WEBM")|(EXT="WMV")|(EXT="MOV")|(EXT="3GP")|(EXT="BIK")|(EXT="MP3")|(EXT="FLAC")|(EXT="APE")|(EXT="ALAC")|(EXT="OGG")|(EXT="WMA")|(EXT="WAV")|(EXT="M4A")|(EXT="AAC")|(EXT="AC3")|(EXT="AIFF")|(EXT="VOC")|(EXT="ROQ")|(EXT="AMR")|(EXT="OPUS"))', maxlen);
 end;
 
+procedure ListSetDefaultParams(dps:pListDefaultParamStruct); dcpcall;
+var
+  Ini: TIniFile;
+begin
+  wlxmpvIni := string(dps^.DefaultIniName);
+  writeln('path to ini: ', wlxmpvIni);  //path to ini: ~/.config/doublecmd/wlx.ini or %commander_path%/wlx.ini
+  Ini:= TIniFile.Create(wlxmpvIni);
+  try
+    wlxmpvAudio := Ini.ReadString('wlxMpv', 'Audio', wlxmpvAudio);
+    wlxmpvOSD := Ini.ReadString('wlxMpv', 'OSD', wlxmpvOSD);
+  finally
+    Ini.Free;
+  end;
+end;
+
 exports
   ListLoad,
   ListCloseWindow,
-  ListGetDetectString;
+  ListGetDetectString,
+  ListSetDefaultParams;
 
 {$R *.res}
 
